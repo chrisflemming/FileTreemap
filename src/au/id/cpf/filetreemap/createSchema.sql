@@ -1,0 +1,1 @@
+CREATE TABLE DiskScan(id INTEGER PRIMARY KEY, parentId INTEGER, level INTEGER, path TEXT, name TEXT, extension TEXT, isDirectory INTEGER, creationTime INTEGER, lastAccessTime INTEGER, lastModifiedTime INTEGER, size INTEGER, sizeIncludingChildren INTEGER);
