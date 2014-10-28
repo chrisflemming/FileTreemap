@@ -76,7 +76,7 @@ public class Scanner {
 
         @Override
         public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attrs) throws IOException {
-            String pathString = dir.toFile().getAbsolutePath();
+            String pathString = dir.toString();
             if (directoriesToIgnore.contains(pathString)) {
                 return FileVisitResult.SKIP_SUBTREE;
             } else {
@@ -93,7 +93,7 @@ public class Scanner {
 
         @Override
         public FileVisitResult visitFileFailed(Path file, IOException exc) throws IOException {
-            System.err.println("Failed visiting " + file.toFile().getAbsolutePath());
+            System.err.println("Failed visiting " + file.toString());
             exc.printStackTrace();
             return FileVisitResult.CONTINUE;
         }
@@ -110,8 +110,15 @@ public class Scanner {
                 pStmt.setInt(2, rowId);
                 pStmt.execute();
             } catch (SQLException ex) {
-                System.err.println("Failed writing record for " + dir.toFile().getAbsolutePath());
+                System.err.println("Failed writing record for " + dir.toString());
                 ex.printStackTrace();
+            }
+
+            // Add the recursive size of this directory to the recursive size for the parent.
+            if (dir.getNameCount() > 0) { // No parent if this is the filesystem root.
+                long parentRecursiveSize = recusiveDirectorySizes.get(dir.getParent());
+                parentRecursiveSize += recursiveSize;
+                recusiveDirectorySizes.put(dir.getParent(), parentRecursiveSize);
             }
 
             // Remove stored row id and rec
@@ -122,10 +129,17 @@ public class Scanner {
         }
 
         private void handleFileOrDirectory(Path fileOrDir, BasicFileAttributes attrs) {
-            String pathString = fileOrDir.toFile().getAbsolutePath();
-            String name = fileOrDir.toFile().getName();
-            String extension = com.google.common.io.Files.getFileExtension(pathString);
             int level = fileOrDir.getNameCount();
+            String pathString = fileOrDir.toString();
+            String name;
+
+            if (level == 0) {
+                name = pathString;
+            } else {
+                name = fileOrDir.getName(level - 1).toString();
+            }
+            String extension = com.google.common.io.Files.getFileExtension(pathString);
+
             boolean isDirectory = attrs.isDirectory();
             long creationTime = attrs.creationTime().toMillis();
             long lastAccessTime = attrs.lastAccessTime().toMillis();
@@ -228,15 +242,15 @@ public class Scanner {
                     if (isDirectory) {
                         mapParentPathToRowId.put(fileOrDir, currentRowid);
                         recusiveDirectorySizes.put(fileOrDir, size);
+                    } else {
+                        // Add the size of this file to the recursive size for the parent.
+                        long parentRecursiveSize = recusiveDirectorySizes.get(fileOrDir.getParent());
+                        parentRecursiveSize += size;
+                        recusiveDirectorySizes.put(fileOrDir.getParent(), parentRecursiveSize);
                     }
+
                     currentRowid++;
-
-                    // Add the size of this file or directory to the recursive size for the parent.
-                    long parentRecursiveSize = recusiveDirectorySizes.get(fileOrDir.getParent());
-                    parentRecursiveSize += size;
-                    recusiveDirectorySizes.put(fileOrDir.getParent(), parentRecursiveSize);
                 }
-
 
 
             } catch (SQLException ex) {
