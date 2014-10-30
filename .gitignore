@@ -50,3 +50,9 @@ out/production/FileTreemap/au/id/cpf/filetreemap/Scanner$DiskScannerVisitor.clas
 out/production/FileTreemap/guava-18.0.jar
 
 out/production/FileTreemap/sqlite-jdbc-3.8.6.jar
+
+*.class
+
+out/production/FileTreemap/au/id/cpf/filetreemap/TreemapViewer.properties
+
+out/production/FileTreemap/bsaf-1.9.jar

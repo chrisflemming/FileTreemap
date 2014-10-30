@@ -29,6 +29,18 @@ public class Scanner {
 
         Connection connection = initDB(outputDir);
 
+        // Turn off synchronous writing to disk to improve speed
+        //PreparedStatement pStmt1 = connection.prepareStatement("PRAGMA synchronous = OFF");
+        //pStmt1.execute();
+
+        // Store rollback journal in memory to improve speed
+        //PreparedStatement pStmt2 = connection.prepareStatement("PRAGMA journal_mode = MEMORY");
+        //pStmt2.execute();
+
+        // SQLite evaluates every insert/update in a unique transaction. Wrap everything in a single transaction to improve speed.
+        PreparedStatement pStmt3 = connection.prepareStatement("BEGIN TRANSACTION;");
+        pStmt3.execute();
+
         File[] fsRoots = File.listRoots();
         for (File root : fsRoots) {
             try {
@@ -37,6 +49,9 @@ public class Scanner {
                 ex.printStackTrace();
             }
         }
+
+        PreparedStatement pStmt4 = connection.prepareStatement("COMMIT;");
+        pStmt4.execute();
     }
 
     private static Connection initDB(File outputDir) throws Exception {
@@ -64,7 +79,11 @@ public class Scanner {
         private HashMap<Path, Integer> mapParentPathToRowId;
         private HashMap<Path, Long> recusiveDirectorySizes;
 
-        public DiskScannerVisitor(Connection connection) {
+        private PreparedStatement pStmtInsertEntry;
+        private PreparedStatement pStmtInsertEntryFilesystemRoot;
+        private PreparedStatement pStmtUpdateEntryRecursiveSize;
+
+        public DiskScannerVisitor(Connection connection) throws SQLException {
             this.connection = connection;
             this.currentRowid = 0;
             mapParentPathToRowId = new HashMap<Path, Integer>();
@@ -72,6 +91,10 @@ public class Scanner {
 
             directoriesToIgnore = new ArrayList<String>();
             directoriesToIgnore.add("/Volumes");
+
+            pStmtInsertEntry = connection.prepareStatement("INSERT INTO DiskScan VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);");
+            pStmtInsertEntryFilesystemRoot = connection.prepareStatement("INSERT INTO DiskScan VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);");
+            pStmtUpdateEntryRecursiveSize = connection.prepareStatement("UPDATE DiskScan SET sizeIncludingChildren = ? WHERE id = ?;");
         }
 
         @Override
@@ -105,10 +128,9 @@ public class Scanner {
             int rowId = mapParentPathToRowId.get(dir);
 
             try {
-                PreparedStatement pStmt = connection.prepareStatement("UPDATE DiskScan SET sizeIncludingChildren = ? WHERE id = ?;");
-                pStmt.setLong(1, recursiveSize);
-                pStmt.setInt(2, rowId);
-                pStmt.execute();
+                pStmtUpdateEntryRecursiveSize.setLong(1, recursiveSize);
+                pStmtUpdateEntryRecursiveSize.setInt(2, rowId);
+                pStmtUpdateEntryRecursiveSize.execute();
             } catch (SQLException ex) {
                 System.err.println("Failed writing record for " + dir.toString());
                 ex.printStackTrace();
@@ -154,90 +176,85 @@ public class Scanner {
                 if (level == 0) {
                     // This is a filesystem root.
 
-                    PreparedStatement pStmt = connection.prepareStatement("INSERT INTO DiskScan VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);");
-
                     //id
-                    pStmt.setInt(1, currentRowid);
+                    pStmtInsertEntryFilesystemRoot.setInt(1, currentRowid);
 
                     //parent Id null for the root
 
                     //level
-                    pStmt.setInt(2, level);
+                    pStmtInsertEntryFilesystemRoot.setInt(2, level);
 
                     //path
-                    pStmt.setString(3, pathString);
+                    pStmtInsertEntryFilesystemRoot.setString(3, pathString);
 
                     //name
-                    pStmt.setString(4, name);
+                    pStmtInsertEntryFilesystemRoot.setString(4, name);
 
                     //extension
-                    pStmt.setString(5, extension);
+                    pStmtInsertEntryFilesystemRoot.setString(5, extension);
 
                     //isDirectory (Boolean represented as integer in SQLite)
-                    pStmt.setInt(6, isDirectory == true ? 1 : 0);
+                    pStmtInsertEntryFilesystemRoot.setInt(6, isDirectory == true ? 1 : 0);
 
                     //creationTime
-                    pStmt.setLong(7, creationTime);
+                    pStmtInsertEntryFilesystemRoot.setLong(7, creationTime);
 
                     //lastAccessTime
-                    pStmt.setLong(8, lastAccessTime);
+                    pStmtInsertEntryFilesystemRoot.setLong(8, lastAccessTime);
 
                     //lastModifiedTime
-                    pStmt.setLong(9, lastModifiedTime);
+                    pStmtInsertEntryFilesystemRoot.setLong(9, lastModifiedTime);
 
                     //size
-                    pStmt.setLong(10, size);
+                    pStmtInsertEntryFilesystemRoot.setLong(10, size);
 
                     //size including children - updated later
-                    pStmt.setLong(11, size);
+                    pStmtInsertEntryFilesystemRoot.setLong(11, size);
 
-                    pStmt.execute();
+                    pStmtInsertEntryFilesystemRoot.execute();
 
                     mapParentPathToRowId.put(fileOrDir, currentRowid);
                     recusiveDirectorySizes.put(fileOrDir, size);
                     currentRowid++;
                 } else {
-                    //PreparedStatement pStmt = connection.prepareStatement("INSERT INTO DiskScan VALUES (NULL, (SELECT id FROM DiskScan WHERE path = ? AND level = ?), ?, ?, ?, ?, ?, ?, ?);");
-                    PreparedStatement pStmt = connection.prepareStatement("INSERT INTO DiskScan VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);");
-
                     //id
-                    pStmt.setInt(1, currentRowid);
+                    pStmtInsertEntry.setInt(1, currentRowid);
 
                     //parent id
                     int parentId = mapParentPathToRowId.get(fileOrDir.getParent());
-                    pStmt.setInt(2, parentId);
+                    pStmtInsertEntry.setInt(2, parentId);
 
                     //level
-                    pStmt.setInt(3, level);
+                    pStmtInsertEntry.setInt(3, level);
 
                     //path
-                    pStmt.setString(4, pathString);
+                    pStmtInsertEntry.setString(4, pathString);
 
                     //name
-                    pStmt.setString(5, name);
+                    pStmtInsertEntry.setString(5, name);
 
                     //extension
-                    pStmt.setString(6, extension);
+                    pStmtInsertEntry.setString(6, extension);
 
                     //isDirectory (Boolean represented as integer in SQLite)
-                    pStmt.setInt(7, isDirectory == true ? 1 : 0);
+                    pStmtInsertEntry.setInt(7, isDirectory == true ? 1 : 0);
 
                     //creationTime
-                    pStmt.setLong(8, creationTime);
+                    pStmtInsertEntry.setLong(8, creationTime);
 
                     //lastAccessTime
-                    pStmt.setLong(9, lastAccessTime);
+                    pStmtInsertEntry.setLong(9, lastAccessTime);
 
                     //lastModifiedTime
-                    pStmt.setLong(10, lastModifiedTime);
+                    pStmtInsertEntry.setLong(10, lastModifiedTime);
 
                     //size
-                    pStmt.setLong(11, size);
+                    pStmtInsertEntry.setLong(11, size);
 
                     //size including children - updated later
-                    pStmt.setLong(12, size);
+                    pStmtInsertEntry.setLong(12, size);
 
-                    pStmt.execute();
+                    pStmtInsertEntry.execute();
 
                     if (isDirectory) {
                         mapParentPathToRowId.put(fileOrDir, currentRowid);
