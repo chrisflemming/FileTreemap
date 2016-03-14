@@ -1,12 +1,13 @@
 package au.id.cpf.filetreemap;
 
-import org.jdesktop.application.Application;
-import org.jdesktop.application.SingleFrameApplication;
+import org.jdesktop.application.*;
 import org.jdesktop.application.utils.AppHelper;
 import org.jdesktop.application.utils.OSXAdapter;
 import org.jdesktop.application.utils.PlatformType;
 
 import javax.swing.*;
+import javax.swing.Action;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.lang.reflect.Method;
 import java.util.ResourceBundle;
@@ -66,7 +67,7 @@ public class TreemapViewer extends SingleFrameApplication {
         //mnuFile.setName("mnuFile");
 
         JMenuItem mnuItOpen = new JMenuItem("Open");
-        //mnuItAbout.setAction(actionMap.get("mnuItHelpAbout"));
+        mnuItOpen.setAction(actionMap.get("mnuItOpen"));
         mnuFile.add(mnuItOpen);
 
         return mnuFile;
@@ -89,7 +90,6 @@ public class TreemapViewer extends SingleFrameApplication {
         }
 
 
-
         return mnuHelp;
     }
 
@@ -99,7 +99,7 @@ public class TreemapViewer extends SingleFrameApplication {
             // Unfortunately setting the application about name in a SAF lifecycle method is too late
             // which means we can't use the SAF resource injection.
             String packageName = applicationClass.getPackage().getName();
-            String bundleName = packageName+"."+applicationClass.getSimpleName();
+            String bundleName = packageName + "." + applicationClass.getSimpleName();
 
             ResourceBundle bundle = ResourceBundle.getBundle(bundleName);
             String name = bundle.getString("Application.shortName");
@@ -113,13 +113,14 @@ public class TreemapViewer extends SingleFrameApplication {
 
     /**
      * Returns true if this application is running on a MAC.
-     *
      */
     public static boolean isMac() {
         return PlatformType.OS_X.equals(AppHelper.getPlatform());
     }
 
-    /** Action to invoke to display the about box */
+    /**
+     * Action to invoke to display the about box
+     */
     protected Action _showAboutAction;
 
     public void showAboutBox() {
@@ -129,6 +130,7 @@ public class TreemapViewer extends SingleFrameApplication {
     /**
      * Configures the MAC application menu item (About <application>) to invoke the supplied
      * Action.
+     *
      * @param aboutBoxAction the Action to invoke from the MAC about menu.
      */
     protected void configureMacAboutBox(Action aboutBoxAction) {
@@ -136,8 +138,7 @@ public class TreemapViewer extends SingleFrameApplication {
         try {
             Method showAboutBox = TreemapViewer.class.getDeclaredMethod("showAboutBox", null);
             OSXAdapter.setAboutHandler(this, showAboutBox);
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
             e.printStackTrace();
         }
     }
@@ -151,11 +152,22 @@ public class TreemapViewer extends SingleFrameApplication {
     protected void shutdown() {
         try {
             super.shutdown();
-        }
-        catch (Exception e) {
+        } catch (Exception e) {
 
         }
     }
+
+    @org.jdesktop.application.Action
+    public void mnuItOpen() throws Exception {
+        JFileChooser chooser = new JFileChooser();
+        FileNameExtensionFilter filter = new FileNameExtensionFilter("Desk Scans", "fms");
+        chooser.setFileFilter(filter);
+        int returnVal = chooser.showOpenDialog(getMainFrame());
+        if (returnVal == JFileChooser.APPROVE_OPTION) {
+            SquarifiedTreemap.processDiskScan(chooser.getSelectedFile());
+        }
+    }
+
 
     class TreemapCanvas extends JPanel {
 
@@ -163,7 +175,7 @@ public class TreemapViewer extends SingleFrameApplication {
         protected void paintComponent(Graphics g) {
             super.paintComponent(g);
 
-            g.drawString("This is my custom Panel!",10,20);
+            g.drawString("This is my custom Panel!", 10, 20);
             g.drawRect(5, 5, this.getWidth() - 10, this.getHeight() - 10);
         }
     }
