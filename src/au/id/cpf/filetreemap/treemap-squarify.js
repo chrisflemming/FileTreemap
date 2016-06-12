@@ -140,7 +140,7 @@ var Treemap = {};
         }
 
         // flattenTreemap - squarify implementation returns an array of arrays of coordinates
-        //                  because we have a new array everytime we switch to building a new row
+        //                  because we have a new array every time we switch to building a new row
         //                  this converts it into an array of coordinates.
         function flattenTreemap(rawtreemap) {
             var flattreemap = [];
